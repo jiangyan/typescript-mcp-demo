@@ -86,7 +86,7 @@ The MCP server will start on port 8000 by default.
 ```bash
 cd client
 npm run build
-npm run server
+npm start
 ```
 
 The web server will start on port 3000 by default.
