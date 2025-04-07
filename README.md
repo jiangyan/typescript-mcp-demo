@@ -1,7 +1,7 @@
 # MCP Chat with Claude
 
 A full-stack application demonstrating the integration of Model Context Protocol (MCP) with Anthropic's Claude LLM, providing an interactive chat interface that leverages MCP tools.
-![image](https://github.com/user-attachments/assets/28c09d42-c684-4e69-bbf3-23fb275897a8)
+![image](https://github.com/user-attachments/assets/eed2ac7a-9c5f-46c0-8a42-ae950416569b)
 
 ## Project Overview
 
