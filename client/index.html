@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Chat with Claude</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MCP Chat with Claude</h1>
+        </header>
+        <main>
+            <div class="chat-panel">
+                <div id="chat-messages">
+                    <div class="message system">
+                        Welcome to MCP Chat! Ask me anything.
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <textarea id="user-input" placeholder="Type your message here..."></textarea>
+                    <button id="send-button">Send</button>
+                </div>
+            </div>
+            <div class="response-panel">
+                <h2>Response Details</h2>
+                <div id="tool-results">
+                    <div class="placeholder">Tool results will appear here</div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="chat.js" type="module"></script>
+</body>
+</html> 
