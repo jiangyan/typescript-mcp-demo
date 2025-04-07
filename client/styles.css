@@ -147,22 +147,46 @@ code {
     padding: 15px;
     border-radius: 5px;
     min-height: 200px;
+    overflow-y: auto;
+    max-height: calc(100vh - 200px);
+}
+
+.tool-calls-header {
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.tool-calls-header h3 {
+    color: #0078d4;
+    font-size: 1.2em;
+}
+
+.tool-call-container {
+    margin-bottom: 20px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .tool-call {
-    margin-bottom: 20px;
     padding: 15px;
     background-color: #f0f7ff;
     border-left: 4px solid #0078d4;
-    border-radius: 5px;
+    border-radius: 5px 5px 0 0;
 }
 
 .tool-result {
-    margin-top: 10px;
     padding: 15px;
     background-color: #f0fff0;
     border-left: 4px solid #2e8b57;
-    border-radius: 5px;
+    border-radius: 0 0 5px 5px;
+}
+
+.tool-separator hr {
+    margin: 0;
+    border: none;
+    height: 1px;
+    background-color: #e0e0e0;
 }
 
 h3 {

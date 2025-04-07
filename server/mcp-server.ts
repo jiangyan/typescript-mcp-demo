@@ -8,9 +8,15 @@ const server = new McpServer({
   version: "1.0.0"
 });
 
-server.tool("get-todo",
-  { category: z.string() },
-  async ({ category }) => {
+// Defining tools based on SDK examples
+server.tool("get-todo", 
+  // Schema
+  { 
+    category: z.string().describe("Category of todo to retrieve (life, work, family, friends)") 
+  }, 
+  // Handler
+  async (args) => {
+    const category = args.category;
     let todoText;
     switch (category) {
       case "life":
@@ -34,11 +40,12 @@ server.tool("get-todo",
   }
 );
 
-server.tool("get-plan",
-  { },
+server.tool("get-plan", 
+  // Empty schema - no parameters  
+  {}, 
+  // Handler
   async () => ({
-    content: [{ type: "text", 
-      text: "buy stocks" }]
+    content: [{ type: "text", text: "meet my friends" }]
   })
 );
 

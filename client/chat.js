@@ -49,7 +49,7 @@ async function handleSendMessage() {
     // Update message history
     messageHistory.push({ role: 'user', content: message });
 
-    // Clear the tool results panel
+    // Clear the tool results panel for a new query
     toolResults.innerHTML = '<div class="placeholder">Processing your request...</div>';
 
     try {
@@ -68,7 +68,7 @@ async function handleSendMessage() {
         }
 
         // Process the response
-        await processResponse(data.response);
+        await processResponse(data.response, true);
     } catch (error) {
         console.error('Error processing message:', error);
         addSystemMessage('An error occurred while processing your message.');
@@ -76,97 +76,125 @@ async function handleSendMessage() {
 }
 
 // Process Claude's response
-async function processResponse(response) {
-    // Clear the placeholder
-    toolResults.innerHTML = '';
+async function processResponse(response, isInitialResponse = false) {
+    // Only clear the placeholder on initial response
+    if (isInitialResponse) {
+        toolResults.innerHTML = '';
+        
+        // Add a header for this query's tool calls
+        const toolCallsHeader = document.createElement('div');
+        toolCallsHeader.className = 'tool-calls-header';
+        toolCallsHeader.innerHTML = `<h3>Tool Calls for Current Query</h3><hr>`;
+        toolResults.appendChild(toolCallsHeader);
+    }
     
-    // Process each content part
-    for (const content of response.content) {
-        if (content.type === 'text') {
-            // Add text response to chat
-            addAssistantMessage(content.text);
-            // Add to message history
-            messageHistory.push({ role: 'assistant', content: content.text });
-        } 
-        else if (content.type === 'tool_use') {
-            // Handle tool calls
-            const toolName = content.name;
-            const toolInput = content.input;
-            const toolId = content.id || generateUniqueId();
+    // Check if there are any tool calls in the response
+    const toolCalls = response.content.filter(content => content.type === 'tool_use');
+    const textContents = response.content.filter(content => content.type === 'text');
+    
+    // Display any text content from the response
+    for (const content of textContents) {
+        addAssistantMessage(content.text);
+        messageHistory.push({ role: 'assistant', content: content.text });
+    }
+    
+    // If there are no tool calls, we're done
+    if (toolCalls.length === 0) {
+        return;
+    }
+    
+    // Process all tool calls first
+    for (const toolCall of toolCalls) {
+        const toolName = toolCall.name;
+        const toolInput = toolCall.input;
+        const toolId = toolCall.id || generateUniqueId();
+        
+        // Create container for this tool call and its result
+        const toolCallContainer = document.createElement('div');
+        toolCallContainer.className = 'tool-call-container';
+        
+        // Add tool call information to the tool results panel
+        const toolCallDiv = document.createElement('div');
+        toolCallDiv.className = 'tool-call';
+        toolCallDiv.innerHTML = `
+            <h3>Tool Call: ${toolName}</h3>
+            <pre>${JSON.stringify(toolInput, null, 2)}</pre>
+        `;
+        toolCallContainer.appendChild(toolCallDiv);
+        
+        // Add a message indicating tool use
+        addSystemMessage(`Using tool: ${toolName}`);
+        
+        try {
+            // Call the tool via API
+            const toolResponse = await fetch(`${API_URL}/tool`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: toolName, input: toolInput })
+            });
             
-            // Add tool call information to the tool results panel
-            const toolCallDiv = document.createElement('div');
-            toolCallDiv.className = 'tool-call';
-            toolCallDiv.innerHTML = `
-                <h3>Tool Call: ${toolName}</h3>
-                <pre>${JSON.stringify(toolInput, null, 2)}</pre>
+            const toolData = await toolResponse.json();
+            
+            // Display tool result
+            const toolResultDiv = document.createElement('div');
+            toolResultDiv.className = 'tool-result';
+            toolResultDiv.innerHTML = `
+                <h3>Tool Result:</h3>
+                <pre>${JSON.stringify(toolData.result, null, 2)}</pre>
             `;
-            toolResults.appendChild(toolCallDiv);
+            toolCallContainer.appendChild(toolResultDiv);
             
-            // Add a message indicating tool use
-            addSystemMessage(`Using tool: ${toolName}`);
+            // Add a separator
+            const separator = document.createElement('div');
+            separator.className = 'tool-separator';
+            separator.innerHTML = '<hr>';
+            toolCallContainer.appendChild(separator);
             
-            try {
-                // Call the tool via API
-                const toolResponse = await fetch(`${API_URL}/tool`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: toolName, input: toolInput })
-                });
-                
-                const toolData = await toolResponse.json();
-                
-                // Display tool result
-                const toolResultDiv = document.createElement('div');
-                toolResultDiv.className = 'tool-result';
-                toolResultDiv.innerHTML = `
-                    <h3>Tool Result:</h3>
-                    <pre>${JSON.stringify(toolData.result, null, 2)}</pre>
-                `;
-                toolResults.appendChild(toolResultDiv);
-                
-                // Add tool call to message history
-                messageHistory.push({ 
-                    role: 'assistant', 
-                    content: [
-                        { type: 'tool_use', id: toolId, name: toolName, input: toolInput }
-                    ]
-                });
-                
-                // Add tool result to message history in the correct format
-                messageHistory.push({ 
-                    role: 'user', 
-                    content: [
-                        { 
-                            type: 'tool_result', 
-                            tool_use_id: toolId,
-                            content: JSON.stringify(toolData.result)
-                        }
-                    ]
-                });
-                
-                // Get a follow-up response from Claude with the tool result
-                const followUpResponse = await fetch(`${API_URL}/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages: messageHistory })
-                });
-                
-                const followUpData = await followUpResponse.json();
-                
-                // Process the follow-up response
-                if (followUpData.response && followUpData.response.content) {
-                    const followUpContent = followUpData.response.content.find(c => c.type === 'text');
-                    if (followUpContent) {
-                        addAssistantMessage(followUpContent.text);
-                        messageHistory.push({ role: 'assistant', content: followUpContent.text });
+            // Add the whole container to the results panel
+            toolResults.appendChild(toolCallContainer);
+            
+            // Add tool call to message history
+            messageHistory.push({ 
+                role: 'assistant', 
+                content: [
+                    { type: 'tool_use', id: toolId, name: toolName, input: toolInput }
+                ]
+            });
+            
+            // Add tool result to message history in the correct format
+            messageHistory.push({ 
+                role: 'user', 
+                content: [
+                    { 
+                        type: 'tool_result', 
+                        tool_use_id: toolId,
+                        content: JSON.stringify(toolData.result)
                     }
-                }
-            } catch (error) {
-                console.error('Error using tool:', error);
-                addSystemMessage(`Error using tool ${toolName}: ${error.message}`);
-            }
+                ]
+            });
+        } catch (error) {
+            console.error('Error using tool:', error);
+            addSystemMessage(`Error using tool ${toolName}: ${error.message}`);
         }
+    }
+    
+    // After all tool calls are processed, get a follow-up response from Claude
+    try {
+        const followUpResponse = await fetch(`${API_URL}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: messageHistory })
+        });
+        
+        const followUpData = await followUpResponse.json();
+        
+        // Process the follow-up response (which might have more tool calls)
+        if (followUpData.response) {
+            await processResponse(followUpData.response, false);
+        }
+    } catch (error) {
+        console.error('Error getting follow-up response:', error);
+        addSystemMessage('An error occurred while getting the follow-up response.');
     }
 }
 

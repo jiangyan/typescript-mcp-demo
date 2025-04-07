@@ -111,10 +111,29 @@ app.post('/api/chat', async (req, res) => {
     // Ensure tool_use messages have IDs
     messages = ensureToolUseIds(messages);
     
+    // Create a dynamic system message based on available tools
+    let toolDescriptions = mcpTools.map(tool => 
+      `- ${tool.name}: ${tool.description || `Tool: ${tool.name}`}`
+    ).join('\n');
+    
+    const systemContent = `You have access to the following tools:\n${toolDescriptions}\n\nWhen responding to user queries, use these tools as needed to provide complete answers. If a task requires multiple tools, use them in sequence without waiting for additional prompting. Always analyze tool results and use them to guide further tool choices when necessary.
+
+For example, if a user asks about their plan and todos, you should:
+1. First call the get-plan tool to find out their plan
+2. Analyze the plan result to determine which category it belongs to
+3. Then call the get-todo tool with the appropriate category
+4. Present a complete answer using both results
+
+Always provide thoughtful, complete responses that utilize all available tools when appropriate.`;
+    
+    // Filter out any existing system messages (they're not supported in messages array)
+    messages = messages.filter((msg: any) => msg.role !== 'system');
+    
     // Claude API with tools - using any to bypass TypeScript constraints
     // as this is using a newer version of the API 
     const response = await (anthropic.messages.create as any)({
       model: "claude-3-5-sonnet-20241022",
+      system: systemContent,
       max_tokens: 1024,
       messages,
       tools: mcpTools,
