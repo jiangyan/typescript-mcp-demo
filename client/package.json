@@ -4,8 +4,8 @@
   "type": "module",
   "main": "dist/client.js",
   "scripts": {
-    "start": "node dist/host-app.js",
-    "client": "node dist/mcp-client-example.js",
+    "start": "node --no-deprecation dist/host-app.js",
+    "client": "node --no-deprecation dist/mcp-client-example.js",
     "build": "tsc",
     "dev": "tsc -w"
   },
