@@ -9,7 +9,22 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
-const mcpServerUrl = process.env.MCP_SERVER_URL || "http://localhost:8000";
+
+// Configure MCP servers
+const mcpServers = [
+  {
+    name: "todoplan-server",
+    url: process.env.MCP_SERVER_TODOPLAN_URL || "http://localhost:8000/sse",
+    client: null as Client | null,
+    tools: [] as MCPTool[]
+  },
+  {
+    name: "project-server",
+    url: process.env.MCP_SERVER_PROJECT_URL || "http://localhost:8001/sse",
+    client: null as Client | null,
+    tools: [] as MCPTool[]
+  }
+];
 
 // Middleware
 app.use(cors());
@@ -25,6 +40,14 @@ if (!ANTHROPIC_API_KEY) {
 
 // Define tool interface
 interface MCPTool {
+  name: string;
+  description: string;
+  input_schema: any;
+  server?: string; // Track which server this tool belongs to
+}
+
+// For tools sent to Anthropic API
+interface AnthropicTool {
   name: string;
   description: string;
   input_schema: any;
@@ -61,42 +84,64 @@ const anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
 });
 
-// Initialize MCP client
-const mcpClient = new Client(
-  { name: "mcp-client-web", version: "1.0.0" },
-  { capabilities: { tools: {} } }
-);
+// Combined tools from all servers
+let allMcpTools: MCPTool[] = [];
 
-// Initialize tools array
-let mcpTools: MCPTool[] = [];
-
-// Connect to MCP server
-async function connectToMCP() {
+// Connect to an MCP server
+async function connectToMCPServer(server: typeof mcpServers[0]) {
   try {
-    const url = new URL(mcpServerUrl);
+    const url = new URL(server.url);
     const transport = new SSEClientTransport(url);
-    await mcpClient.connect(transport);
+    
+    // Create a new client for this server
+    const client = new Client(
+      { name: `mcp-client-${server.name}`, version: "1.0.0" },
+      { capabilities: { tools: {} } }
+    );
+    
+    await client.connect(transport);
+    server.client = client;
     
     // Get available tools
-    const toolsResult = await mcpClient.listTools();
-    mcpTools = toolsResult.tools.map(tool => ({
+    const toolsResult = await client.listTools();
+    server.tools = toolsResult.tools.map(tool => ({
       name: tool.name,
       description: tool.description || `Tool: ${tool.name}`,
-      input_schema: tool.inputSchema
+      input_schema: tool.inputSchema,
+      server: server.name // Mark which server this tool belongs to
     }));
     
-    console.log('Connected to MCP server with tools:', mcpTools.map(t => t.name));
+    // Add server-specific prefix to tool names to avoid conflicts
+    server.tools = server.tools.map(tool => ({
+      ...tool,
+      name: `${server.name}_${tool.name}`, // Use underscore instead of colon
+      description: `[${server.name}] ${tool.description || `Tool: ${tool.name}`}`
+    }));
+    
+    // Add tools to the combined list
+    allMcpTools = [...allMcpTools, ...server.tools];
+    
+    console.log(`Connected to ${server.name} with tools:`, server.tools.map(t => t.name));
+    return true;
   } catch (error) {
-    console.error('Failed to connect to MCP server:', error);
+    console.error(`Failed to connect to ${server.name}:`, error);
+    return false;
   }
 }
 
-// Connect to MCP server on startup
-connectToMCP();
+// Connect to all MCP servers on startup
+async function connectToAllMCPServers() {
+  for (const server of mcpServers) {
+    await connectToMCPServer(server);
+  }
+}
+
+// Connect to MCP servers on startup
+connectToAllMCPServers();
 
 // Endpoint to list available tools
 app.get('/api/tools', (req, res) => {
-  res.json({ tools: mcpTools });
+  res.json({ tools: allMcpTools });
 });
 
 // Endpoint to process messages with Claude
@@ -112,22 +157,26 @@ app.post('/api/chat', async (req, res) => {
     messages = ensureToolUseIds(messages);
     
     // Create a dynamic system message based on available tools
-    let toolDescriptions = mcpTools.map(tool => 
-      `- ${tool.name}: ${tool.description || `Tool: ${tool.name}`}`
+    let toolDescriptions = allMcpTools.map(tool => 
+      `- ${tool.name}: ${tool.description}`
     ).join('\n');
     
-    const systemContent = `You have access to the following tools:\n${toolDescriptions}\n\nWhen responding to user queries, use these tools as needed to provide complete answers. If a task requires multiple tools, use them in sequence without waiting for additional prompting. Always analyze tool results and use them to guide further tool choices when necessary.
+    const systemContent = `You have access to the following tools from multiple servers:\n${toolDescriptions}\n\nWhen responding to user queries, use these tools as needed to provide complete answers. If a task requires multiple tools, use them in sequence without waiting for additional prompting. Always analyze tool results and use them to guide further tool choices when necessary.
 
-For example, if a user asks about their plan and todos, you should:
-1. First call the get-plan tool to find out their plan
-2. Analyze the plan result to determine which category it belongs to
-3. Then call the get-todo tool with the appropriate category
-4. Present a complete answer using both results
+Important: Tools are prefixed with the server name they belong to (e.g., "todoplan-server_get-todo", "project-server_get-project").
+
+For example, if a user asks about their todo in a specific project category:
+1. Use the "project-server_get-project" tool to get project details
+2. Then use the "todoplan-server_get-todo" tool with the appropriate category
+3. Present a complete answer using both results
 
 Always provide thoughtful, complete responses that utilize all available tools when appropriate.`;
     
     // Filter out any existing system messages (they're not supported in messages array)
     messages = messages.filter((msg: any) => msg.role !== 'system');
+    
+    // Create a version of the tools without the 'server' field for Anthropic API
+    const toolsForAnthropicApi = allMcpTools.map(({ server, ...rest }) => rest);
     
     // Claude API with tools - using any to bypass TypeScript constraints
     // as this is using a newer version of the API 
@@ -136,7 +185,7 @@ Always provide thoughtful, complete responses that utilize all available tools w
       system: systemContent,
       max_tokens: 1024,
       messages,
-      tools: mcpTools,
+      tools: toolsForAnthropicApi,
     });
     
     res.json({ response });
@@ -155,8 +204,20 @@ app.post('/api/tool', async (req, res) => {
       return res.status(400).json({ error: 'Tool name is required' });
     }
     
-    const result = await mcpClient.callTool({
-      name,
+    // Parse the server prefix and tool name
+    const [serverPrefix, ...toolNameParts] = name.split('_');
+    const toolName = toolNameParts.join('_');
+    
+    // Find the appropriate server for this tool
+    const server = mcpServers.find(s => s.name === serverPrefix);
+    
+    if (!server || !server.client) {
+      return res.status(400).json({ error: `Server "${serverPrefix}" not found or not connected` });
+    }
+    
+    // Call the tool on the appropriate server client
+    const result = await server.client.callTool({
+      name: toolName, // Use the original tool name without prefix
       arguments: input || {}
     });
     

@@ -5,17 +5,18 @@ A full-stack application demonstrating the integration of Model Context Protocol
 
 ## Project Overview
 
-This project consists of two main components:
+This project consists of three main components:
 
-1. **MCP Server**: A Node.js server implementing the Model Context Protocol that provides various tools for the LLM to use.
-2. **Host App**: A web application that serves as a chat interface and acts as the intermediary between the user, Claude AI, and the MCP server.
+1. **Multiple MCP Servers**: Node.js servers implementing the Model Context Protocol that provide various specialized tools for the LLM to use.
+2. **Host App**: An Express server that acts as the intermediary between the user, Claude AI, and the MCP servers.
+3. **Web Client**: A browser-based chat interface that communicates with the Host App.
 
 ## Features
 
 - Interactive chat interface with Claude AI
 - Two-panel UI showing conversation and tool execution details
-- Dynamic tool discovery from MCP server
-- Support for multiple tools with different parameters
+- Dynamic tool discovery from multiple MCP servers
+- Support for specialized tools with different parameters from each server
 - Proper handling of Claude's tool use via MCP
 
 ## Project Structure
@@ -30,9 +31,10 @@ This project consists of two main components:
 │   ├── package.json        # Client dependencies
 │   └── mcp-client-example.ts # Example MCP client for testing
 │
-├── server/                 # MCP server
+├── server/                 # MCP servers
 │   ├── dist/               # Compiled TypeScript
-│   ├── mcp-server.ts       # MCP server implementation
+│   ├── mcp-server-todoplan.ts # TodoPlan MCP server implementation
+│   ├── mcp-server-project.ts  # Project MCP server implementation
 │   └── package.json        # Server dependencies
 │
 ├── .gitignore              # Git ignore file
@@ -64,22 +66,34 @@ This project consists of two main components:
 3. Create `.env` file in the client directory with your Anthropic API key:
    ```
    ANTHROPIC_API_KEY=your-api-key-here
-   MCP_SERVER_HOST=localhost
-   MCP_SERVER_PORT=8000
-   MCP_SERVER_PATH=/sse
+   MCP_SERVER_TODOPLAN_URL=http://localhost:8000/sse
+   MCP_SERVER_PROJECT_URL=http://localhost:8001/sse
+   PORT=3000
+   ```
+
+4. Create `.env` file in the server directory:
+   ```
+   MCP_SERVER_TODOPLAN_PORT=8000
+   MCP_SERVER_PROJECT_PORT=8001
    ```
 
 ## Setup and Running
 
-### Step 1: Start the MCP server
+### Step 1: Start the MCP servers
 
 ```bash
+# Terminal 1: Start the TodoPlan MCP server
 cd server
-npm run build
-npm start
+npm run build:todoplan
+npm run start:todoplan
+
+# Terminal 2: Start the Project MCP server
+cd server
+npm run build:project
+npm run start:project
 ```
 
-The MCP server will start on port 8000 by default.
+The TodoPlan MCP server will start on port 8000 and the Project MCP server will start on port 8001 by default.
 
 ### Step 2: Start the host app (web server)
 
@@ -100,14 +114,18 @@ http://localhost:3000
 
 ## Available MCP Tools
 
-The MCP server provides the following tools that Claude can use:
+The MCP servers provide the following tools that Claude can use:
 
-1. **get-todo**: Get a todo item for a specific category
+1. **todoplan-server_get-todo**: Get a todo item for a specific category
    - Parameters:
      - `category`: String (e.g., "life", "work", "family", "friends")
 
-2. **get-plan**: Get the overall plan
+2. **todoplan-server_get-plan**: Get the overall plan
    - Parameters: None
+
+3. **project-server_get-project-details**: Get details for a specific project
+   - Parameters:
+     - `project_name`: String (e.g., "Earth", "Mars", "Jupiter", "Saturn")
 
 ## Additional Example
 
@@ -123,9 +141,9 @@ npm run client
 
 ### MCP Server Development
 
-To add a new tool to the MCP server:
+To add a new tool to an MCP server:
 
-1. Open `server/mcp-server.ts`
+1. Open the server file (e.g., `server/mcp-server-todoplan.ts`)
 2. Add a new tool definition following the existing pattern:
    ```typescript
    server.tool("tool-name",
@@ -144,7 +162,7 @@ To add a new tool to the MCP server:
 
 The host app consists of:
 
-- Backend (`host-app.ts`): Express server that communicates with both Claude and the MCP server
+- Backend (`host-app.ts`): Express server that communicates with Claude and multiple MCP servers
 - Frontend (`chat.js`, `index.html`, `styles.css`): Chat interface that communicates with the backend
 
 ## Architecture
@@ -152,7 +170,7 @@ The host app consists of:
 ```
 ┌─────────────┐       ┌────────────────┐       ┌───────────────┐
 │             │       │                │       │               │
-│  Web UI     │◄─────►│  Host App      │◄─────►│  MCP Server   │
+│  Web UI     │◄─────►│  Host App      │◄─────►│  MCP Servers  │
 │  (Browser)  │       │  (Express)     │       │  (Node.js)    │
 │             │       │                │       │               │
 └─────────────┘       └───────┬────────┘       └───────────────┘
@@ -166,15 +184,50 @@ The host app consists of:
                       └───────────────┘
 ```
 
+## Multiple MCP Servers Implementation
+
+This project implements a multi-server MCP architecture, allowing Claude to access tools from different specialized servers.
+
+### Server Configuration
+
+The project includes two distinct MCP servers:
+
+1. **TodoPlan MCP Server** (`server/mcp-server-todoplan.ts`): Provides tools for managing todos and plans
+   - `get-todo`: Get a todo item for a specific category
+   - `get-plan`: Get the overall plan
+
+2. **Project MCP Server** (`server/mcp-server-project.ts`): Provides tools for accessing project information
+   - `get-project-details`: Get details for a specific project
+
+### Host App Integration
+
+The host app (`client/host-app.ts`) has been implemented to:
+
+1. Connect to multiple MCP servers simultaneously
+2. Prefix tool names with their server name using underscores to avoid conflicts (e.g., `todoplan-server_get-todo`)
+3. Route tool calls to the appropriate server based on the prefix
+4. Present a unified set of tools to the LLM
+
+### Example Queries
+
+Try the following queries to test the integration of multiple servers:
+
+- "Tell me about project Earth"
+- "What's my todo for the work category?"
+- "Find my todo in the work category and tell me what projects are related to it"
+- "What's my plan?"
+
 ## Troubleshooting
 
-1. **Connection issues**: Ensure both servers are running and check the console for error messages.
+1. **Connection issues**: Ensure both MCP servers and the host app are running and check the console for error messages.
 
-2. **Tool not found**: Make sure the MCP server is running and the tool names match exactly.
+2. **Tool not found**: Make sure the MCP servers are running and the tool names match exactly.
 
-3. **API key errors**: Verify your Anthropic API key is correctly set in the `.env` file.
+3. **API key errors**: Verify your Anthropic API key is correctly set in the client's `.env` file.
 
 4. **Tool use errors**: Check the response panel for detailed error information.
+
+5. **Invalid tool name format**: Ensure tool names follow Anthropic's required format (alphanumeric characters, underscores, and hyphens only).
 
 ## License
 

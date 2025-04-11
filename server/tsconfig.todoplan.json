@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["./mcp-server-todoplan.ts"],
+  "exclude": ["node_modules", "dist"]
+} 

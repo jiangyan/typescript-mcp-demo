@@ -4,50 +4,42 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 
 const server = new McpServer({
-  name: "example-server",
+  name: "project-mcp-server",
   version: "1.0.0"
 });
 
 // Defining tools based on SDK examples
-server.tool("get-todo", 
+server.tool("get-project-details", 
   // Schema
   { 
-    category: z.string().describe("Category of todo to retrieve (life, work, family, friends)") 
+    project_name: z.string().describe("Name of the project to retrieve details") 
   }, 
   // Handler
   async (args) => {
-    const category = args.category;
-    let todoText;
-    switch (category) {
-      case "life":
-        todoText = "go to the gym";
+    const project_name = args.project_name;
+    let content;
+    switch (project_name) {
+      case "Earth":
+        content = "Project A is a project to build a website for a client";
         break;
-      case "work":
-        todoText = "finish the project report";
+      case "Jupiter":
+        content = "Project B is a project to build a mobile app for a client";
         break;
-      case "family":
-        todoText = "trip to disneyland";
+      case "Saturn":
+        content = "Project C is a project to build a desktop app for a client";
         break;
-      case "friends":
-        todoText = "drink at the pub";
+      case "Uranus":
+        content = "Project D is a project to build a robot for a client";
         break;
       default:
-        todoText = "no todo available";
+        content = "no todo available";
     }
     return {
-      content: [{ type: "text", text: todoText }]
+      content: [{ type: "text", text: content }]
     };
   }
 );
 
-server.tool("get-plan", 
-  // Empty schema - no parameters  
-  {}, 
-  // Handler
-  async () => ({
-    content: [{ type: "text", text: "meet my friends" }]
-  })
-);
 
 const app = express();
 
@@ -74,7 +66,7 @@ app.post("/messages", async (req: Request, res: Response) => {
   }
 });
 
-const port = process.env.PORT || 8000;
+const port = process.env.MCP_SERVER_PROJECT_PORT || 8001;
 app.listen(port, () => {
   console.log(`Mcp Server is running on port ${port}`);
 });
