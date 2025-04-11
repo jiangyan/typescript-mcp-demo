@@ -51,8 +51,8 @@ This project consists of three main components:
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/mcp-chat-with-claude.git
-   cd mcp-chat-with-claude
+   git clone https://github.com/jiangyan/typescript-mcp-demo.git
+   cd typescript-mcp-demo
    ```
 
 2. Install dependencies for both client and server:
